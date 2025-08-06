@@ -84,7 +84,11 @@ io.on('connection', (socket) => {
             room.playerWords[playerName] = words;
         }
 
-        io.to(roomId).emit('wordsCommitted', { committedPlayers: room.committedPlayers, totalPlayers: room.roomSize });
+        // Sende auch die Namen der Spieler, die bereits eingereicht haben
+        io.to(roomId).emit('wordsCommitted', {
+            committedPlayers: room.committedPlayers,
+            totalPlayers: room.roomSize
+        });
 
         if (room.committedPlayers.length === room.roomSize) {
             // Wortpool aus allen Begriffen aller Spieler zusammenstellen

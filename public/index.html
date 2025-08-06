@@ -264,7 +264,12 @@
 
     socket.on('wordsCommitted', ({ committedPlayers, totalPlayers }) => {
         const committedList = document.getElementById('committedPlayersList');
-        committedList.textContent = `${committedPlayers.length} von ${totalPlayers} Spielern haben Begriffe eingereicht.`;
+        if (committedPlayers.length === 0) {
+            committedList.textContent = "Noch keine Spieler haben Begriffe eingereicht.";
+        } else {
+            committedList.innerHTML = `${committedPlayers.length} von ${totalPlayers} Spielern haben Begriffe eingereicht:<br>` +
+                committedPlayers.map(name => `<span>${name}</span>`).join(', ');
+        }
     });
 
     socket.on('countdown', (count) => {

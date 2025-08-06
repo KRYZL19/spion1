@@ -211,6 +211,25 @@
         });
     }
 
+    function submitWords() {
+        const words = [];
+        for (let i = 1; i <= 5; i++) {
+            const word = document.getElementById(`word${i}`).value.trim();
+            if (word) words.push(word);
+        }
+        if (words.length !== 5) return showToast('Bitte gib genau 5 Begriffe ein.');
+        socket.emit('submitWords', { roomId: currentRoomId, playerName: socket.playerName, words });
+        document.getElementById('wordInputSection').querySelector('button').disabled = true;
+        document.getElementById('wordInputSection').querySelector('button').textContent = 'Begriffe gesendet';
+    }
+
+    function leaveRoom() {
+        socket.emit('leaveRoom', { roomId: currentRoomId });
+        currentRoomId = null;
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('startSection').classList.add('active');
+    }
+
     socket.on('roomCreated', ({ roomId, players }) => {
         currentRoomId = roomId;
         document.getElementById('roomId').textContent = roomId;
@@ -225,6 +244,75 @@
         updatePlayerList('playersList', players);
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
         document.getElementById('waitingSection').classList.add('active');
+    });
+
+    // Event-Handler für startWordInput hinzufügen
+    socket.on('startWordInput', () => {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('wordInputSection').classList.add('active');
+
+        // Zurücksetzen des Buttons falls ein Spieler erneut beitritt
+        const submitButton = document.getElementById('wordInputSection').querySelector('button');
+        submitButton.disabled = false;
+        submitButton.textContent = 'Begriffe senden';
+    });
+
+    socket.on('wordsCommitted', ({ committedPlayers, totalPlayers }) => {
+        const committedList = document.getElementById('committedPlayersList');
+        committedList.textContent = `${committedPlayers.length} von ${totalPlayers} Spielern haben Begriffe eingereicht.`;
+    });
+
+    socket.on('countdown', (count) => {
+        document.getElementById('countdownDisplay').textContent = `Spiel startet in ${count} Sekunden...`;
+    });
+
+    socket.on('gameStart', ({ role, word, players }) => {
+        document.getElementById('role').textContent = role;
+        document.getElementById('role').className = role === 'Spion' ? 'role-spion' : '';
+        document.getElementById('word').textContent = role === 'Spion' ? 'Du musst den geheimen Begriff erraten!' : `Geheimer Begriff: ${word}`;
+        updatePlayerList('gamePlayersList', players);
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('gameSection').classList.add('active');
+    });
+
+    socket.on('startVoting', ({ players }) => {
+        const voteBtns = document.getElementById('voteButtons');
+        voteBtns.innerHTML = '';
+        players.forEach(p => {
+            if (p.name !== socket.playerName) {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-outline-danger vote-btn';
+                btn.innerHTML = `<span class="avatar">${p.avatar}</span> ${p.name}`;
+                btn.onclick = () => socket.emit('vote', { roomId: currentRoomId, votedPlayer: p.name });
+                voteBtns.appendChild(btn);
+            }
+        });
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('votingSection').classList.add('active');
+    });
+
+    socket.on('voteUpdate', (votes) => {
+        const voteList = document.getElementById('voteList');
+        voteList.innerHTML = '';
+        Object.entries(votes).forEach(([voter, votedFor]) => {
+            const li = document.createElement('li');
+            li.textContent = `${voter} hat für ${votedFor} gestimmt.`;
+            voteList.appendChild(li);
+        });
+    });
+
+    socket.on('voteResult', ({ result }) => {
+        showToast(result);
+    });
+
+    socket.on('gameOver', ({ winner }) => {
+        document.getElementById('gameOverMessage').textContent = `Spiel beendet! ${winner} haben gewonnen!`;
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('gameOverSection').classList.add('active');
+    });
+
+    socket.on('error', ({ message }) => {
+        showToast(message);
     });
 
     // Darkmode

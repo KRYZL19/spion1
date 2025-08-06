@@ -77,14 +77,22 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (!room) return socket.emit('error', { message: 'Raum existiert nicht.' });
 
-        room.words.push(...words);
+        // Begriffe pro Spieler speichern
+        if (!room.playerWords) room.playerWords = {};
         if (!room.committedPlayers.includes(playerName)) {
             room.committedPlayers.push(playerName);
+            room.playerWords[playerName] = words;
         }
 
         io.to(roomId).emit('wordsCommitted', { committedPlayers: room.committedPlayers, totalPlayers: room.roomSize });
 
         if (room.committedPlayers.length === room.roomSize) {
+            // Wortpool aus allen Begriffen aller Spieler zusammenstellen
+            room.words = [];
+            Object.values(room.playerWords).forEach(wordArr => {
+                room.words.push(...wordArr);
+            });
+
             let countdown = 5;
             const countdownInterval = setInterval(() => {
                 io.to(roomId).emit('countdown', countdown);

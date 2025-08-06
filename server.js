@@ -79,33 +79,47 @@ io.on('connection', (socket) => {
 
         // Begriffe pro Spieler speichern
         if (!room.playerWords) room.playerWords = {};
+
+        // Prüfen ob der Spieler bereits Begriffe eingereicht hat
         if (!room.committedPlayers.includes(playerName)) {
             room.committedPlayers.push(playerName);
             room.playerWords[playerName] = words;
-        }
 
-        // Sende auch die Namen der Spieler, die bereits eingereicht haben
-        io.to(roomId).emit('wordsCommitted', {
-            committedPlayers: room.committedPlayers,
-            totalPlayers: room.roomSize
-        });
+            // Debug-Ausgabe zur Überprüfung der Spieler, die eingereicht haben
+            console.log(`Spieler ${playerName} hat Begriffe eingereicht. Bisher eingereicht: ${room.committedPlayers.length}/${room.roomSize}`);
 
-        if (room.committedPlayers.length === room.roomSize) {
-            // Wortpool aus allen Begriffen aller Spieler zusammenstellen
-            room.words = [];
-            Object.values(room.playerWords).forEach(wordArr => {
-                room.words.push(...wordArr);
+            // An alle Clients im Raum senden, wer bereits eingereicht hat
+            io.to(roomId).emit('wordsCommitted', {
+                committedPlayers: room.committedPlayers,
+                totalPlayers: room.roomSize
             });
 
-            let countdown = 5;
-            const countdownInterval = setInterval(() => {
-                io.to(roomId).emit('countdown', countdown);
-                countdown--;
-                if (countdown < 0) {
-                    clearInterval(countdownInterval);
-                    startGame(roomId);
-                }
-            }, 1000);
+            // Wenn alle Spieler eingereicht haben, Countdown starten
+            if (room.committedPlayers.length === room.roomSize) {
+                console.log(`Alle Spieler haben Begriffe eingereicht. Starte Countdown für Raum ${roomId}.`);
+
+                // Wortpool aus allen Begriffen aller Spieler zusammenstellen
+                room.words = [];
+                Object.values(room.playerWords).forEach(wordArr => {
+                    room.words.push(...wordArr);
+                });
+
+                let countdown = 5;
+                const countdownInterval = setInterval(() => {
+                    io.to(roomId).emit('countdown', countdown);
+                    countdown--;
+                    if (countdown < 0) {
+                        clearInterval(countdownInterval);
+                        startGame(roomId);
+                    }
+                }, 1000);
+            }
+        } else {
+            // Spieler hat bereits eingereicht - sende trotzdem den aktuellen Status
+            socket.emit('wordsCommitted', {
+                committedPlayers: room.committedPlayers,
+                totalPlayers: room.roomSize
+            });
         }
     });
 

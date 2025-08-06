@@ -267,8 +267,9 @@
         if (committedPlayers.length === 0) {
             committedList.textContent = "Noch keine Spieler haben Begriffe eingereicht.";
         } else {
-            committedList.innerHTML = `${committedPlayers.length} von ${totalPlayers} Spielern haben Begriffe eingereicht:<br>` +
-                committedPlayers.map(name => `<span>${name}</span>`).join(', ');
+            // Deutlichere Anzeige, wer bereits Begriffe eingereicht hat
+            committedList.innerHTML = `<strong>${committedPlayers.length} von ${totalPlayers} Spielern</strong> haben Begriffe eingereicht:<br>` +
+                committedPlayers.map(name => `<span class="badge bg-success">${name}</span>`).join(' ');
         }
     });
 

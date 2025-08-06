@@ -3,139 +3,136 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Online Spion Spiel</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+  <title>Spion Spiel</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; }
+    .section { display: none; }
+    .active { display: block; }
+    input, button, select { margin: 10px; padding: 5px; }
+  </style>
 </head>
-<body class="bg-gray-100 font-sans">
-  <div class="container mx-auto p-4 max-w-md">
-    <h1 class="text-2xl font-bold text-center mb-4">Spion Spiel</h1>
-
-    <!-- Startbildschirm -->
-    <div id="start-screen" class="space-y-4">
-      <input id="player-name" type="text" placeholder="Dein Name" class="w-full p-2 border rounded">
-      <div id="create-game" class="space-y-2">
-        <input id="room-size" type="number" min="2" max="10" placeholder="Spieleranzahl (2-10)" class="w-full p-2 border rounded">
-        <button onclick="createRoom()" class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Raum erstellen</button>
-      </div>
-      <div id="join-game" class="space-y-2">
-        <input id="room-id" type="text" placeholder="Raum-ID eingeben" class="w-full p-2 border rounded">
-        <button onclick="joinRoom()" class="w-full bg-green-500 text-white p-2 rounded hover:bg-green-600">Raum beitreten</button>
-      </div>
+<body>
+  <div id="startSection" class="section active">
+    <h1>Spion Spiel</h1>
+    <div>
+      <h2>Raum erstellen</h2>
+      <input type="text" id="createPlayerName" placeholder="Dein Name">
+      <select id="roomSize">
+        <option value="3">3 Spieler</option>
+        <option value="4">4 Spieler</option>
+        <option value="5">5 Spieler</option>
+        <option value="6">6 Spieler</option>
+      </select>
+      <select id="spyCount">
+        <option value="1">1 Spion</option>
+        <option value="2">2 Spione</option>
+        <option value="3">3 Spione</option>
+      </select>
+      <button onclick="createRoom()">Raum erstellen</button>
     </div>
-
-    <!-- Wartebildschirm -->
-    <div id="lobby-screen" class="hidden space-y-4">
-      <h2 class="text-xl font-semibold">Warte auf Spieler...</h2>
-      <p>Raum-ID: <span id="room-id-display"></span></p>
-      <p>Spieler: <span id="player-count"></span></p>
-      <ul id="player-list" class="list-disc pl-5"></ul>
+    <div>
+      <h2>Raum beitreten</h2>
+      <input type="text" id="joinPlayerName" placeholder="Dein Name">
+      <input type="text" id="roomIdInput" placeholder="Raum-ID">
+      <button onclick="joinRoom()">Raum beitreten</button>
     </div>
+  </div>
 
-    <!-- Begriffseingabe -->
-    <div id="word-input-screen" class="hidden space-y-4">
-      <h2 class="text-xl font-semibold">Gib 5 Begriffe ein</h2>
-      <div id="word-inputs" class="space-y-2">
-        <input type="text" class="word-input w-full p-2 border rounded" placeholder="Begriff 1">
-        <input type="text" class="word-input w-full p-2 border rounded" placeholder="Begriff 2">
-        <input type="text" class="word-input w-full p-2 border rounded" placeholder="Begriff 3">
-        <input type="text" class="word-input w-full p-2 border rounded" placeholder="Begriff 4">
-        <input type="text" class="word-input w-full p-2 border rounded" placeholder="Begriff 5">
-      </div>
-      <button onclick="submitWords()" class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Begriffe senden</button>
-    </div>
+  <div id="waitingSection" class="section">
+    <h2>Warte auf Spieler...</h2>
+    <p>Raum-ID: <span id="roomId"></span></p>
+    <p>Spieler: <span id="players"></span></p>
+    <button onclick="leaveRoom()">Raum verlassen</button>
+  </div>
 
-    <!-- Spielbildschirm -->
-    <div id="game-screen" class="hidden space-y-4">
-      <h2 class="text-xl font-semibold">Spion Spiel</h2>
-      <p>Deine Rolle: <span id="role"></span></p>
-      <p id="word" class="text-lg font-bold"></p>
-      <p>Spieler: <span id="game-player-list"></span></p>
-    </div>
+  <div id="wordInputSection" class="section">
+    <h2>Gib 5 Begriffe ein</h2>
+    <input type="text" id="word1" placeholder="Begriff 1">
+    <input type="text" id="word2" placeholder="Begriff 2">
+    <input type="text" id="word3" placeholder="Begriff 3">
+    <input type="text" id="word4" placeholder="Begriff 4">
+    <input type="text" id="word5" placeholder="Begriff 5">
+    <button onclick="submitWords()">Begriffe senden</button>
+  </div>
 
-    <!-- Fehlermeldung -->
-    <p id="error" class="text-red-500 text-center hidden"></p>
+  <div id="gameSection" class="section">
+    <h1>Spion Spiel</h1>
+    <p>Deine Rolle: <span id="role"></span></p>
+    <p id="word"></p>
+    <p>Spieler: <span id="gamePlayers"></span></p>
   </div>
 
   <script>
-    const socket = io(window.location.origin);
-    let playerName = '';
-    let roomId = '';
+    const socket = io();
+    let currentRoomId = null;
 
-    // Bildschirme
-    const startScreen = document.getElementById('start-screen');
-    const lobbyScreen = document.getElementById('lobby-screen');
-    const wordInputScreen = document.getElementById('word-input-screen');
-    const gameScreen = document.getElementById('game-screen');
-    const errorDisplay = document.getElementById('error');
-
-    // Funktionen
-    function showScreen(screen) {
-      [startScreen, lobbyScreen, wordInputScreen, gameScreen].forEach(s => s.classList.add('hidden'));
-      screen.classList.remove('hidden');
-      errorDisplay.classList.add('hidden');
-    }
-
-    function showError(message) {
-      errorDisplay.textContent = message;
-      errorDisplay.classList.remove('hidden');
+    function showSection(sectionId) {
+      document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
     }
 
     function createRoom() {
-      playerName = document.getElementById('player-name').value.trim();
-      const roomSize = parseInt(document.getElementById('room-size').value);
-      if (!playerName) return showError('Bitte gib einen Namen ein.');
-      if (!roomSize || roomSize < 2 || roomSize > 10) return showError('Spieleranzahl muss zwischen 2 und 10 liegen.');
-      socket.emit('createRoom', { playerName, roomSize });
+      const playerName = document.getElementById('createPlayerName').value.trim();
+      const roomSize = parseInt(document.getElementById('roomSize').value);
+      const spyCount = parseInt(document.getElementById('spyCount').value);
+      if (!playerName) return alert('Bitte gib einen Namen ein.');
+      if (spyCount >= roomSize) return alert('Die Anzahl der Spione muss kleiner als die Raumgröße sein.');
+      socket.emit('createRoom', { playerName, roomSize, spyCount });
     }
 
     function joinRoom() {
-      playerName = document.getElementById('player-name').value.trim();
-      roomId = document.getElementById('room-id').value.trim();
-      if (!playerName) return showError('Bitte gib einen Namen ein.');
-      if (!roomId) return showError('Bitte gib eine Raum-ID ein.');
+      const playerName = document.getElementById('joinPlayerName').value.trim();
+      const roomId = document.getElementById('roomIdInput').value.trim();
+      if (!playerName || !roomId) return alert('Bitte gib Namen und Raum-ID ein.');
       socket.emit('joinRoom', { playerName, roomId });
     }
 
-    function submitWords() {
-      const words = Array.from(document.getElementsByClassName('word-input'))
-        .map(input => input.value.trim())
-        .filter(word => word);
-      if (words.length !== 5) return showError('Bitte gib genau 5 Begriffe ein.');
-      socket.emit('submitWords', { roomId, playerName, words });
-      showScreen(lobbyScreen);
+    function leaveRoom() {
+      socket.emit('leaveRoom', { roomId: currentRoomId });
+      currentRoomId = null;
+      showSection('startSection');
     }
 
-    // Socket.IO Events
-    socket.on('roomCreated', ({ roomId: id, roomSize, players }) => {
-      roomId = id;
-      document.getElementById('room-id-display').textContent = id;
-      document.getElementById('player-count').textContent = `${players.length}/${roomSize}`;
-      document.getElementById('player-list').innerHTML = players.map(p => `<li>${p}</li>`).join('');
-      showScreen(lobbyScreen);
+    function submitWords() {
+      const words = [
+        document.getElementById('word1').value.trim(),
+        document.getElementById('word2').value.trim(),
+        document.getElementById('word3').value.trim(),
+        document.getElementById('word4').value.trim(),
+        document.getElementById('word5').value.trim()
+      ];
+      if (words.some(word => !word)) return alert('Bitte gib alle 5 Begriffe ein.');
+      socket.emit('submitWords', { roomId: currentRoomId, playerName: document.getElementById('createPlayerName').value.trim() || document.getElementById('joinPlayerName').value.trim(), words });
+    }
+
+    socket.on('roomCreated', ({ roomId, roomSize, spyCount, players }) => {
+      currentRoomId = roomId;
+      document.getElementById('roomId').textContent = roomId;
+      document.getElementById('players').textContent = players.join(', ');
+      showSection('waitingSection');
     });
 
-    socket.on('roomJoined', ({ roomId: id, roomSize, players }) => {
-      roomId = id;
-      document.getElementById('room-id-display').textContent = id;
-      document.getElementById('player-count').textContent = `${players.length}/${roomSize}`;
-      document.getElementById('player-list').innerHTML = players.map(p => `<li>${p}</li>`).join('');
-      showScreen(lobbyScreen);
-    });
-
-    socket.on('error', ({ message }) => {
-      showError(message);
+    socket.on('roomJoined', ({ roomId, roomSize, players }) => {
+      currentRoomId = roomId;
+      document.getElementById('roomId').textContent = roomId;
+      document.getElementById('players').textContent = players.join(', ');
+      showSection('waitingSection');
     });
 
     socket.on('startWordInput', () => {
-      showScreen(wordInputScreen);
+      showSection('wordInputSection');
     });
 
     socket.on('gameStart', ({ role, word, players }) => {
       document.getElementById('role').textContent = role;
-      document.getElementById('word').textContent = role === 'Spion' ? 'Du bist der Spion!' : `Das Wort ist: ${word}`;
-      document.getElementById('game-player-list').textContent = players.join(', ');
-      showScreen(gameScreen);
+      document.getElementById('word').textContent = role === 'Spion' ? '' : `Dein Wort: ${word}`;
+      document.getElementById('gamePlayers').textContent = players.join(', ');
+      showSection('gameSection');
+    });
+
+    socket.on('error', ({ message }) => {
+      alert(message);
     });
   </script>
 </body>

@@ -12,47 +12,49 @@ const io = new Server(server, {
     }
 });
 
+// Statische Dateien bereitstellen
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const rooms = {};
-const avatars = ["😀","😎","🦊","🐻","🐼","🐵","🐸","🐯","🐶","🐱","🐹","🐰","🐢","🦄","🐙","🐧","🐦","🐠","🐷","🦁"];
 
 io.on('connection', (socket) => {
-    socket.on('createRoom', ({ playerName, roomSize, spyCount, roomId }) => {
+    // Raum erstellen
+    socket.on('createRoom', ({ playerName, playerEmoji, roomSize, spyCount, roomId }) => {
         if (spyCount >= roomSize) return socket.emit('error', { message: 'Die Anzahl der Spione muss kleiner als die Raumgröße sein.' });
         if (rooms[roomId]) return socket.emit('error', { message: 'Diese Raum-ID ist bereits vergeben.' });
 
-        const avatar = avatars[Math.floor(Math.random() * avatars.length)];
         rooms[roomId] = {
             roomSize,
             spyCount,
-            players: [{ name: playerName, avatar, isSpy: false }],
+            players: [{ name: playerName, avatar: playerEmoji, isSpy: false }],
             words: [],
             committedPlayers: [],
             gameStarted: false,
             votes: {},
             spies: []
         };
+
         socket.playerName = playerName;
-        socket.avatar = avatar;
+        socket.avatar = playerEmoji;
         socket.join(roomId);
+
         socket.emit('roomCreated', { roomId, players: rooms[roomId].players });
         io.to(roomId).emit('roomJoined', { roomId, players: rooms[roomId].players });
     });
 
-    socket.on('joinRoom', ({ playerName, roomId }) => {
+    // Raum beitreten
+    socket.on('joinRoom', ({ playerName, playerEmoji, roomId }) => {
         const room = rooms[roomId];
         if (!room) return socket.emit('error', { message: 'Raum existiert nicht.' });
         if (room.players.length >= room.roomSize) return socket.emit('error', { message: 'Raum ist voll.' });
         if (room.players.some(p => p.name === playerName)) return socket.emit('error', { message: 'Name bereits vergeben.' });
 
-        const avatar = avatars[Math.floor(Math.random() * avatars.length)];
-        room.players.push({ name: playerName, avatar, isSpy: false });
+        room.players.push({ name: playerName, avatar: playerEmoji, isSpy: false });
         socket.playerName = playerName;
-        socket.avatar = avatar;
+        socket.avatar = playerEmoji;
         socket.join(roomId);
 
         io.to(roomId).emit('roomJoined', { roomId, players: room.players });
@@ -62,6 +64,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Begriffe einreichen
     socket.on('submitWords', ({ roomId, playerName, words }) => {
         const room = rooms[roomId];
         if (!room) return socket.emit('error', { message: 'Raum existiert nicht.' });
@@ -86,6 +89,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Spiel starten
     function startGame(roomId) {
         const room = rooms[roomId];
         if (!room) return;
@@ -100,6 +104,7 @@ io.on('connection', (socket) => {
         room.players.forEach((p, i) => p.isSpy = spyIndices.includes(i));
         const word = room.words[Math.floor(Math.random() * room.words.length)];
 
+        // Rollen individuell senden
         room.players.forEach((player, index) => {
             const role = spyIndices.includes(index) ? 'Spion' : 'Spieler';
             const playerSocket = [...io.sockets.sockets.values()].find(s =>
@@ -119,6 +124,7 @@ io.on('connection', (socket) => {
         setTimeout(() => io.to(roomId).emit('startVoting', { players: room.players }), 30000); // 30 Sekunden Diskussion
     }
 
+    // Voting-System
     socket.on('vote', ({ roomId, votedPlayer }) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -150,6 +156,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Raum verlassen
     socket.on('leaveRoom', ({ roomId }) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -159,6 +166,7 @@ io.on('connection', (socket) => {
         if (room.players.length === 0) delete rooms[roomId];
     });
 
+    // Spieler-Disconnect
     socket.on('disconnect', () => {
         for (const roomId in rooms) {
             const room = rooms[roomId];

@@ -18,6 +18,7 @@
         body.dark-mode { background-color: #121212; color: #ffffff; }
         body.dark-mode .card { background-color: #1e1e1e; color: #ffffff; border: 1px solid #333; }
         body.dark-mode .form-control, body.dark-mode .form-select { background-color: #2a2a2a; color: #ffffff; border: 1px solid #444; }
+        body.dark-mode input::placeholder { color: #ffffff; opacity: 0.7; } /* Darkmode Placeholder Weiß */
         .toast-container { position: fixed; top: 10px; right: 10px; z-index: 2000; }
         .role-spion { color: darkred; font-weight: bold; }
         .vote-btn { margin: 5px; }
@@ -39,6 +40,17 @@
                         <h2 class="card-title text-center">Raum erstellen</h2>
                         <div class="mb-3">
                             <input type="text" id="createPlayerName" class="form-control" placeholder="Dein Name">
+                        </div>
+                        <div class="mb-3">
+                            <select id="createPlayerEmoji" class="form-select">
+                                <option value="😀">😀</option><option value="😎">😎</option><option value="🦊">🦊</option>
+                                <option value="🐻">🐻</option><option value="🐼">🐼</option><option value="🐵">🐵</option>
+                                <option value="🐸">🐸</option><option value="🐯">🐯</option><option value="🐶">🐶</option>
+                                <option value="🐱">🐱</option><option value="🐹">🐹</option><option value="🐰">🐰</option>
+                                <option value="🐢">🐢</option><option value="🦄">🦄</option><option value="🐙">🐙</option>
+                                <option value="🐧">🐧</option><option value="🐦">🐦</option><option value="🐠">🐠</option>
+                                <option value="🐷">🐷</option><option value="🦁">🦁</option>
+                            </select>
                         </div>
                         <div class="mb-3">
                             <input type="text" id="customRoomId" class="form-control" placeholder="Eigene Raum-ID (z.B. ABC123)">
@@ -68,6 +80,17 @@
                         <h2 class="card-title text-center">Raum beitreten</h2>
                         <div class="mb-3">
                             <input type="text" id="joinPlayerName" class="form-control" placeholder="Dein Name">
+                        </div>
+                        <div class="mb-3">
+                            <select id="joinPlayerEmoji" class="form-select">
+                                <option value="😀">😀</option><option value="😎">😎</option><option value="🦊">🦊</option>
+                                <option value="🐻">🐻</option><option value="🐼">🐼</option><option value="🐵">🐵</option>
+                                <option value="🐸">🐸</option><option value="🐯">🐯</option><option value="🐶">🐶</option>
+                                <option value="🐱">🐱</option><option value="🐹">🐹</option><option value="🐰">🐰</option>
+                                <option value="🐢">🐢</option><option value="🦄">🦄</option><option value="🐙">🐙</option>
+                                <option value="🐧">🐧</option><option value="🐦">🐦</option><option value="🐠">🐠</option>
+                                <option value="🐷">🐷</option><option value="🦁">🦁</option>
+                            </select>
                         </div>
                         <div class="mb-3">
                             <input type="text" id="roomIdInput" class="form-control" placeholder="Raum-ID">
@@ -147,12 +170,6 @@
 <script>
     const socket = io();
     let currentRoomId = null;
-    let myRole = null;
-
-    function showSection(sectionId) {
-        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-        document.getElementById(sectionId).classList.add('active');
-    }
 
     function showToast(message) {
         const container = document.getElementById('toastContainer');
@@ -167,38 +184,21 @@
 
     function createRoom() {
         const playerName = document.getElementById('createPlayerName').value.trim();
+        const playerEmoji = document.getElementById('createPlayerEmoji').value;
         const roomSize = parseInt(document.getElementById('roomSize').value);
         const spyCount = parseInt(document.getElementById('spyCount').value);
         const roomId = document.getElementById('customRoomId').value.trim();
         if (!playerName || !roomId) return showToast('Bitte gib Namen und Raum-ID ein.');
         if (spyCount >= roomSize) return showToast('Die Anzahl der Spione muss kleiner als die Raumgröße sein.');
-        socket.emit('createRoom', { playerName, roomSize, spyCount, roomId });
+        socket.emit('createRoom', { playerName, playerEmoji, roomSize, spyCount, roomId });
     }
 
     function joinRoom() {
         const playerName = document.getElementById('joinPlayerName').value.trim();
+        const playerEmoji = document.getElementById('joinPlayerEmoji').value;
         const roomId = document.getElementById('roomIdInput').value.trim();
         if (!playerName || !roomId) return showToast('Bitte gib Namen und Raum-ID ein.');
-        socket.emit('joinRoom', { playerName, roomId });
-    }
-
-    function leaveRoom() {
-        socket.emit('leaveRoom', { roomId: currentRoomId });
-        currentRoomId = null;
-        showSection('startSection');
-    }
-
-    function submitWords() {
-        const words = [
-            document.getElementById('word1').value.trim(),
-            document.getElementById('word2').value.trim(),
-            document.getElementById('word3').value.trim(),
-            document.getElementById('word4').value.trim(),
-            document.getElementById('word5').value.trim()
-        ];
-        if (words.some(w => !w)) return showToast('Bitte gib alle 5 Begriffe ein.');
-        const playerName = document.getElementById('createPlayerName').value.trim() || document.getElementById('joinPlayerName').value.trim();
-        socket.emit('submitWords', { roomId: currentRoomId, playerName, words });
+        socket.emit('joinRoom', { playerName, playerEmoji, roomId });
     }
 
     function updatePlayerList(elementId, players) {
@@ -215,87 +215,25 @@
         currentRoomId = roomId;
         document.getElementById('roomId').textContent = roomId;
         updatePlayerList('playersList', players);
-        showSection('waitingSection');
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('waitingSection').classList.add('active');
     });
 
     socket.on('roomJoined', ({ roomId, players }) => {
         currentRoomId = roomId;
         document.getElementById('roomId').textContent = roomId;
         updatePlayerList('playersList', players);
-        showSection('waitingSection');
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('waitingSection').classList.add('active');
     });
 
-    socket.on('startWordInput', () => {
-        showSection('wordInputSection');
-    });
-
-    socket.on('wordsCommitted', ({ committedPlayers, totalPlayers }) => {
-        const list = document.getElementById('committedPlayersList');
-        list.textContent = `${committedPlayers.length}/${totalPlayers} Spieler: ${committedPlayers.join(', ')}`;
-    });
-
-    socket.on('countdown', (seconds) => {
-        document.getElementById('countdownDisplay').textContent = seconds >= 0 ? `Spiel startet in ${seconds}...` : '';
-    });
-
-    socket.on('gameStart', ({ role, word, players }) => {
-        myRole = role;
-        const roleSpan = document.getElementById('role');
-        roleSpan.textContent = role;
-        if (role === 'Spion') roleSpan.classList.add('role-spion');
-        else roleSpan.classList.remove('role-spion');
-        document.getElementById('word').textContent = role === 'Spion' ? '' : `Dein Wort: ${word}`;
-        updatePlayerList('gamePlayersList', players);
-        showSection('gameSection');
-    });
-
-    socket.on('startVoting', ({ players }) => {
-        const voteButtons = document.getElementById('voteButtons');
-        voteButtons.innerHTML = '';
-        players.forEach(p => {
-            const btn = document.createElement('button');
-            btn.className = 'btn btn-outline-primary vote-btn';
-            btn.textContent = `${p.avatar} ${p.name}`;
-            btn.onclick = () => socket.emit('vote', { roomId: currentRoomId, votedPlayer: p.name });
-            voteButtons.appendChild(btn);
-        });
-        document.getElementById('voteList').innerHTML = '';
-        showSection('votingSection');
-    });
-
-    socket.on('voteUpdate', votes => {
-        const list = document.getElementById('voteList');
-        list.innerHTML = '';
-        for (const [voter, voted] of Object.entries(votes)) {
-            const li = document.createElement('li');
-            li.textContent = `${voter} → ${voted}`;
-            list.appendChild(li);
-        }
-    });
-
-    socket.on('voteResult', ({ result, spiesLeft }) => {
-        showToast(result + (spiesLeft > 0 ? ` Noch ${spiesLeft} Spione übrig!` : ''));
-    });
-
-    socket.on('gameOver', ({ winner }) => {
-        document.getElementById('gameOverMessage').textContent = `Spiel vorbei! ${winner} haben gewonnen!`;
-        showSection('gameOverSection');
-    });
-
-    socket.on('error', ({ message }) => showToast(message));
-
+    // Darkmode
     document.getElementById('darkModeToggle').addEventListener('click', () => {
         document.body.classList.toggle('dark-mode');
         localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
     });
-
     if (localStorage.getItem('darkMode') === 'true') {
         document.body.classList.add('dark-mode');
-    }
-
-    // PWA: Service Worker Registrierung
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/service-worker.js');
     }
 </script>
 </body>

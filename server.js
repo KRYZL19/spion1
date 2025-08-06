@@ -21,16 +21,20 @@ app.get('/', (req, res) => {
 const rooms = {};
 
 io.on('connection', (socket) => {
-  socket.on('createRoom', ({ playerName, roomSize }) => {
+  socket.on('createRoom', ({ playerName, roomSize, spyCount }) => {
+    if (spyCount >= roomSize) {
+      return socket.emit('error', { message: 'Die Anzahl der Spione muss kleiner als die Raumgröße sein.' });
+    }
     const roomId = Math.random().toString(36).substring(2, 8);
     rooms[roomId] = {
       roomSize,
+      spyCount,
       players: [playerName],
       words: [],
       gameStarted: false
     };
     socket.join(roomId);
-    socket.emit('roomCreated', { roomId, roomSize, players: [playerName] });
+    socket.emit('roomCreated', { roomId, roomSize, spyCount, players: [playerName] });
   });
 
   socket.on('joinRoom', ({ playerName, roomId }) => {
@@ -51,10 +55,14 @@ io.on('connection', (socket) => {
     if (!room) return socket.emit('error', { message: 'Raum existiert nicht.' });
     room.words.push(...words);
     if (room.words.length === room.roomSize * 5) {
-      const spyIndex = Math.floor(Math.random() * room.players.length);
+      const spyIndices = [];
+      while (spyIndices.length < room.spyCount) {
+        const index = Math.floor(Math.random() * room.players.length);
+        if (!spyIndices.includes(index)) spyIndices.push(index);
+      }
       const word = room.words[Math.floor(Math.random() * room.words.length)];
       room.players.forEach((player, index) => {
-        const role = index === spyIndex ? 'Spion' : 'Spieler';
+        const role = spyIndices.includes(index) ? 'Spion' : 'Spieler';
         io.to(roomId).emit('gameStart', {
           role: player === playerName ? role : undefined,
           word: player === playerName && role !== 'Spion' ? word : undefined,
@@ -62,6 +70,17 @@ io.on('connection', (socket) => {
         });
       });
       room.gameStarted = true;
+    }
+  });
+
+  socket.on('leaveRoom', ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    const playerIndex = room.players.findIndex(p => socket.rooms.has(roomId));
+    if (playerIndex !== -1) {
+      room.players.splice(playerIndex, 1);
+      io.to(roomId).emit('roomJoined', { roomId, roomSize: room.roomSize, players: room.players });
+      if (room.players.length === 0) delete rooms[roomId];
     }
   });
 

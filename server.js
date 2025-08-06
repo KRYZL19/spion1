@@ -12,44 +12,51 @@ const io = new Server(server, {
     }
 });
 
-// Statische Dateien bereitstellen
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const rooms = {};
+const avatars = ["😀","😎","🦊","🐻","🐼","🐵","🐸","🐯","🐶","🐱","🐹","🐰","🐢","🦄","🐙","🐧","🐦","🐠","🐷","🦁"];
 
 io.on('connection', (socket) => {
-    socket.on('createRoom', ({ playerName, roomSize, spyCount }) => {
+    socket.on('createRoom', ({ playerName, roomSize, spyCount, roomId }) => {
         if (spyCount >= roomSize) {
             return socket.emit('error', { message: 'Die Anzahl der Spione muss kleiner als die Raumgröße sein.' });
         }
-        const roomId = Math.random().toString(36).substring(2, 8);
+        if (rooms[roomId]) {
+            return socket.emit('error', { message: 'Diese Raum-ID ist bereits vergeben.' });
+        }
+        const avatar = avatars[Math.floor(Math.random() * avatars.length)];
         rooms[roomId] = {
             roomSize,
             spyCount,
-            players: [playerName],
+            players: [{ name: playerName, avatar }],
             words: [],
             committedPlayers: [],
             gameStarted: false
         };
         socket.playerName = playerName;
+        socket.avatar = avatar;
         socket.join(roomId);
-        socket.emit('roomCreated', { roomId, roomSize, spyCount, players: [playerName] });
+        socket.emit('roomCreated', { roomId, roomSize, spyCount, players: rooms[roomId].players });
+        io.to(roomId).emit('roomJoined', { roomId, players: rooms[roomId].players });
     });
 
     socket.on('joinRoom', ({ playerName, roomId }) => {
         const room = rooms[roomId];
         if (!room) return socket.emit('error', { message: 'Raum existiert nicht.' });
         if (room.players.length >= room.roomSize) return socket.emit('error', { message: 'Raum ist voll.' });
-        if (room.players.includes(playerName)) return socket.emit('error', { message: 'Name bereits vergeben.' });
+        if (room.players.some(p => p.name === playerName)) return socket.emit('error', { message: 'Name bereits vergeben.' });
 
-        room.players.push(playerName);
+        const avatar = avatars[Math.floor(Math.random() * avatars.length)];
+        room.players.push({ name: playerName, avatar });
         socket.playerName = playerName;
+        socket.avatar = avatar;
         socket.join(roomId);
 
-        io.to(roomId).emit('roomJoined', { roomId, roomSize: room.roomSize, players: room.players });
+        io.to(roomId).emit('roomJoined', { roomId, players: room.players });
 
         if (room.players.length === room.roomSize) {
             io.to(roomId).emit('startWordInput');
@@ -65,12 +72,10 @@ io.on('connection', (socket) => {
             room.committedPlayers.push(playerName);
         }
 
-        // Allen Spielern anzeigen, wer committed hat
         io.to(roomId).emit('wordsCommitted', { committedPlayers: room.committedPlayers, totalPlayers: room.roomSize });
 
-        // Wenn alle committed haben, Countdown starten
         if (room.committedPlayers.length === room.roomSize) {
-            let countdown = 5; // Sekunden Countdown
+            let countdown = 5;
             const countdownInterval = setInterval(() => {
                 io.to(roomId).emit('countdown', countdown);
                 countdown--;
@@ -94,11 +99,10 @@ io.on('connection', (socket) => {
 
         const word = room.words[Math.floor(Math.random() * room.words.length)];
 
-        // Rollen individuell an Spieler senden
         room.players.forEach((player, index) => {
             const role = spyIndices.includes(index) ? 'Spion' : 'Spieler';
             const playerSocket = [...io.sockets.sockets.values()].find(s =>
-                [...s.rooms].includes(roomId) && s.playerName === player
+                [...s.rooms].includes(roomId) && s.playerName === player.name
             );
 
             if (playerSocket) {
@@ -116,25 +120,19 @@ io.on('connection', (socket) => {
     socket.on('leaveRoom', ({ roomId }) => {
         const room = rooms[roomId];
         if (!room) return;
-        const playerIndex = room.players.indexOf(socket.playerName);
-        if (playerIndex !== -1) {
-            room.players.splice(playerIndex, 1);
-            room.committedPlayers = room.committedPlayers.filter(p => p !== socket.playerName);
-            io.to(roomId).emit('roomJoined', { roomId, roomSize: room.roomSize, players: room.players });
-            if (room.players.length === 0) delete rooms[roomId];
-        }
+        room.players = room.players.filter(p => p.name !== socket.playerName);
+        room.committedPlayers = room.committedPlayers.filter(p => p !== socket.playerName);
+        io.to(roomId).emit('roomJoined', { roomId, players: room.players });
+        if (room.players.length === 0) delete rooms[roomId];
     });
 
     socket.on('disconnect', () => {
         for (const roomId in rooms) {
             const room = rooms[roomId];
-            const playerIndex = room.players.indexOf(socket.playerName);
-            if (playerIndex !== -1) {
-                room.players.splice(playerIndex, 1);
-                room.committedPlayers = room.committedPlayers.filter(p => p !== socket.playerName);
-                io.to(roomId).emit('roomJoined', { roomId, roomSize: room.roomSize, players: room.players });
-                if (room.players.length === 0) delete rooms[roomId];
-            }
+            room.players = room.players.filter(p => p.name !== socket.playerName);
+            room.committedPlayers = room.committedPlayers.filter(p => p !== socket.playerName);
+            io.to(roomId).emit('roomJoined', { roomId, players: room.players });
+            if (room.players.length === 0) delete rooms[roomId];
         }
     });
 });

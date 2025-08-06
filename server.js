@@ -22,25 +22,24 @@ const avatars = ["😀","😎","🦊","🐻","🐼","🐵","🐸","🐯","🐶",
 
 io.on('connection', (socket) => {
     socket.on('createRoom', ({ playerName, roomSize, spyCount, roomId }) => {
-        if (spyCount >= roomSize) {
-            return socket.emit('error', { message: 'Die Anzahl der Spione muss kleiner als die Raumgröße sein.' });
-        }
-        if (rooms[roomId]) {
-            return socket.emit('error', { message: 'Diese Raum-ID ist bereits vergeben.' });
-        }
+        if (spyCount >= roomSize) return socket.emit('error', { message: 'Die Anzahl der Spione muss kleiner als die Raumgröße sein.' });
+        if (rooms[roomId]) return socket.emit('error', { message: 'Diese Raum-ID ist bereits vergeben.' });
+
         const avatar = avatars[Math.floor(Math.random() * avatars.length)];
         rooms[roomId] = {
             roomSize,
             spyCount,
-            players: [{ name: playerName, avatar }],
+            players: [{ name: playerName, avatar, isSpy: false }],
             words: [],
             committedPlayers: [],
-            gameStarted: false
+            gameStarted: false,
+            votes: {},
+            spies: []
         };
         socket.playerName = playerName;
         socket.avatar = avatar;
         socket.join(roomId);
-        socket.emit('roomCreated', { roomId, roomSize, spyCount, players: rooms[roomId].players });
+        socket.emit('roomCreated', { roomId, players: rooms[roomId].players });
         io.to(roomId).emit('roomJoined', { roomId, players: rooms[roomId].players });
     });
 
@@ -51,7 +50,7 @@ io.on('connection', (socket) => {
         if (room.players.some(p => p.name === playerName)) return socket.emit('error', { message: 'Name bereits vergeben.' });
 
         const avatar = avatars[Math.floor(Math.random() * avatars.length)];
-        room.players.push({ name: playerName, avatar });
+        room.players.push({ name: playerName, avatar, isSpy: false });
         socket.playerName = playerName;
         socket.avatar = avatar;
         socket.join(roomId);
@@ -97,6 +96,8 @@ io.on('connection', (socket) => {
             if (!spyIndices.includes(index)) spyIndices.push(index);
         }
 
+        room.spies = spyIndices.map(i => room.players[i].name);
+        room.players.forEach((p, i) => p.isSpy = spyIndices.includes(i));
         const word = room.words[Math.floor(Math.random() * room.words.length)];
 
         room.players.forEach((player, index) => {
@@ -115,7 +116,39 @@ io.on('connection', (socket) => {
         });
 
         room.gameStarted = true;
+        setTimeout(() => io.to(roomId).emit('startVoting', { players: room.players }), 30000); // 30 Sekunden Diskussion
     }
+
+    socket.on('vote', ({ roomId, votedPlayer }) => {
+        const room = rooms[roomId];
+        if (!room) return;
+        room.votes[socket.playerName] = votedPlayer;
+
+        io.to(roomId).emit('voteUpdate', room.votes);
+
+        if (Object.keys(room.votes).length >= Math.ceil(room.players.length / 2)) {
+            const voteCounts = {};
+            Object.values(room.votes).forEach(v => voteCounts[v] = (voteCounts[v] || 0) + 1);
+
+            const [votedOut, count] = Object.entries(voteCounts).sort((a, b) => b[1] - a[1])[0];
+            if (count >= Math.ceil(room.players.length / 2)) {
+                const votedPlayer = room.players.find(p => p.name === votedOut);
+                if (votedPlayer.isSpy) {
+                    room.spies = room.spies.filter(s => s !== votedOut);
+                    room.players = room.players.filter(p => p.name !== votedOut);
+                    io.to(roomId).emit('voteResult', { result: 'Spion entlarvt! Spieler gewinnen diese Runde.', spiesLeft: room.spies.length });
+                    if (room.spies.length === 0) {
+                        io.to(roomId).emit('gameOver', { winner: 'Spieler' });
+                    } else {
+                        room.votes = {};
+                        io.to(roomId).emit('startVoting', { players: room.players });
+                    }
+                } else {
+                    io.to(roomId).emit('gameOver', { winner: 'Spione' });
+                }
+            }
+        }
+    });
 
     socket.on('leaveRoom', ({ roomId }) => {
         const room = rooms[roomId];

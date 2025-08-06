@@ -246,6 +246,11 @@
         document.getElementById('waitingSection').classList.add('active');
     });
 
+    // Neuer Event-Handler für vollständigen Raum
+    socket.on('roomFull', ({ message }) => {
+        showToast(message);
+    });
+
     // Event-Handler für startWordInput hinzufügen
     socket.on('startWordInput', () => {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));

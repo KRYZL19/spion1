@@ -44,8 +44,8 @@ io.on('connection', (socket) => {
         socket.emit('roomCreated', { roomId, players: rooms[roomId].players });
         io.to(roomId).emit('roomJoined', { roomId, players: rooms[roomId].players });
 
-        // Sofortige Aktivierung der Begriffseingabe für den Raumersteller
-        socket.emit('startWordInput');
+        // Entfernt: Sofortige Aktivierung der Begriffseingabe für den Raumersteller
+        // socket.emit('startWordInput');
     });
 
     // Raum beitreten
@@ -62,12 +62,13 @@ io.on('connection', (socket) => {
 
         io.to(roomId).emit('roomJoined', { roomId, players: room.players });
 
-        // Sofortige Aktivierung der Begriffseingabe für den beitretenden Spieler
-        socket.emit('startWordInput');
+        // Entfernt: Sofortige Aktivierung der Begriffseingabe für den beitretenden Spieler
+        // socket.emit('startWordInput');
 
-        // Weiterhin Überprüfung, ob der Raum voll ist (für zukünftige Funktionen)
+        // Wenn der Raum voll ist, allen Spielern die Begriffseingabe ermöglichen
         if (room.players.length === room.roomSize) {
-            io.to(roomId).emit('roomFull');
+            io.to(roomId).emit('roomFull', { message: `Raum ist voll (${room.players.length}/${room.roomSize})` });
+            io.to(roomId).emit('startWordInput');
         }
     });
 

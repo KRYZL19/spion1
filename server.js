@@ -55,10 +55,20 @@ io.on('connection', (socket) => {
     if (!room) return socket.emit('error', { message: 'Raum existiert nicht.' });
     room.words.push(...words);
     if (room.words.length === room.roomSize * 5) {
+      if (room.spyCount > room.players.length) {
+        return socket.emit('error', {
+          message: 'Die Anzahl der Spione muss kleiner als die Anzahl der Spieler sein.'
+        });
+      }
       const spyIndices = [];
       while (spyIndices.length < room.spyCount) {
         const index = Math.floor(Math.random() * room.players.length);
         if (!spyIndices.includes(index)) spyIndices.push(index);
+      }
+      if (spyIndices.length !== room.spyCount) {
+        return socket.emit('error', {
+          message: 'Fehler bei der Spionenverteilung.'
+        });
       }
       const word = room.words[Math.floor(Math.random() * room.words.length)];
       room.players.forEach((player, index) => {
